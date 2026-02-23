@@ -39,6 +39,7 @@ import {
 function Evaluacion() {
   const [evaluador, setEvaluador] = useState("");
   const [evaluadoNombre, setEvaluadoNombre] = useState("");
+  const [numeroCartel, setNumeroCartel] = useState("");
   const [tipoEvaluacion, setTipoEvaluacion] = useState("equipo");
   const [carrera, setCarrera] = useState("");
   const [criterios, setCriterios] = useState(new Array(10).fill(""));
@@ -53,11 +54,13 @@ function Evaluacion() {
   const [idEliminar, setIdEliminar] = useState(null);
   const formularioRef = useRef(null);
   const criteriosRef = useRef([]);
+  const [tipoMensaje, setTipoMensaje] = useState("success");
 
   const manejarCambio = (index, valor) => {
     const nuevos = [...criterios];
     nuevos[index] = valor;
     setCriterios(nuevos);
+    setMensaje(""); // 🔥 limpia error automáticamente
   };
 
   const calcularTotal = () => {
@@ -94,6 +97,7 @@ function Evaluacion() {
       const datosGuardar = {
         tipoEvaluacion,
         evaluadoNombre,
+        numeroCartel,
         carrera,
         evaluador,
         criterios,
@@ -109,15 +113,22 @@ function Evaluacion() {
       }
 
       setMensaje("Evaluación guardada ✅");
+      setTipoMensaje("success");
       setOpenSnackbar(true);
       setEvaluador("");
       setEvaluadoNombre("");
+      setNumeroCartel("");
       setCarrera("");
       setCriterios(new Array(10).fill(""));
     } catch (error) {
-      console.error("Error al guardar:", error);
-      setMensaje("Error al guardar ❌");
+      setMensaje("Error al guardar ❌", error);
+      setTipoMensaje("error");
       setOpenSnackbar(true);
+    }
+
+    // 🔥 Protección si el documento ya no existe
+    if (editandoId && !lista.find((item) => item.id === editandoId)) {
+      setEditandoId(null);
     }
 
     criteriosRef.current[0]?.focus();
@@ -139,9 +150,17 @@ function Evaluacion() {
   }, []);
 
   const rankingFiltrado = () => {
-    let datos = [...lista];
+    // 🔥 1. Ranking general completo
+    const rankingGeneral = [...lista]
+      .sort((a, b) => b.total - a.total)
+      .map((item, index) => ({
+        ...item,
+        posicion: index + 1,
+      }));
 
-    // Filtro por tipo
+    let datos = [...rankingGeneral];
+
+    // 🔹 Filtro por tipo
     if (filtro === "equipo") {
       datos = datos.filter((item) => item.tipoEvaluacion === "equipo");
     }
@@ -150,24 +169,24 @@ function Evaluacion() {
       datos = datos.filter((item) => item.tipoEvaluacion === "alumno");
     }
 
-    // Filtro por carrera
+    // 🔹 Filtro por carrera
     if (filtroCarrera !== "Todas") {
       datos = datos.filter((item) => item.carrera === filtroCarrera);
     }
 
-    // Buscador por nombre
+    // 🔹 Buscador
     if (busqueda.trim() !== "") {
-      datos = datos.filter((item) =>
-        item.evaluadoNombre.toLowerCase().includes(busqueda.toLowerCase()),
+      const texto = busqueda.toLowerCase();
+
+      datos = datos.filter(
+        (item) =>
+          item.evaluadoNombre?.toLowerCase().includes(texto) ||
+          item.numeroCartel?.toString().includes(texto) ||
+          item.evaluador?.toLowerCase().includes(texto),
       );
     }
 
-    return datos
-      .toSorted((a, b) => b.total - a.total)
-      .map((item, index) => ({
-        ...item,
-        posicion: index + 1,
-      }));
+    return datos;
   };
 
   const obtenerCarreras = () => {
@@ -179,6 +198,7 @@ function Evaluacion() {
     const datosOrdenados = rankingFiltrado().map((item) => ({
       Posicion: item.posicion,
       Nombre: item.evaluadoNombre,
+      Cartel: item.numeroCartel,
       Carrera: item.carrera,
       Evaluador: item.evaluador,
       Total: item.total,
@@ -208,8 +228,23 @@ function Evaluacion() {
   const eliminarEvaluacion = async () => {
     try {
       await deleteDoc(doc(db, "evaluaciones", idEliminar));
+
+      // 🔥 Si estoy eliminando el que estoy editando
+      if (editandoId === idEliminar) {
+        setEditandoId(null);
+        setEvaluador("");
+        setEvaluadoNombre("");
+        setNumeroCartel("");
+        setCarrera("");
+        setCriterios(new Array(10).fill(""));
+      }
+
       setOpenDelete(false);
       setIdEliminar(null);
+
+      setMensaje("Evaluación eliminada 🗑️");
+      setTipoMensaje("info");
+      setOpenSnackbar(true);
     } catch (error) {
       console.error(error);
     }
@@ -218,6 +253,7 @@ function Evaluacion() {
   const cargarParaEditar = (item) => {
     setEvaluador(item.evaluador || "");
     setEvaluadoNombre(item.evaluadoNombre || "");
+    setNumeroCartel(item.numeroCartel || "");
     setCarrera(item.carrera || "");
     setTipoEvaluacion(item.tipoEvaluacion || "equipo");
     setCriterios(item.criterios || new Array(10).fill(""));
@@ -292,6 +328,15 @@ function Evaluacion() {
               }
               value={evaluadoNombre}
               onChange={(e) => setEvaluadoNombre(e.target.value)}
+            />
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <TextField
+              fullWidth
+              label="No. Cartel"
+              value={numeroCartel}
+              onChange={(e) => setNumeroCartel(e.target.value)}
             />
           </Grid>
 
@@ -431,11 +476,12 @@ function Evaluacion() {
         </Grid>
 
         <Table>
-          <TableHead>
+          <TableHead sx={{ backgroundColor: "#1976d2" }}>
             <TableRow>
               <TableCell sx={{ color: "white" }}>POSICIÓN</TableCell>
               <TableCell sx={{ color: "white" }}>TIPO</TableCell>
               <TableCell sx={{ color: "white" }}>NOMBRE</TableCell>
+              <TableCell sx={{ color: "white" }}>NO. CARTEL</TableCell>
               <TableCell sx={{ color: "white" }}>CARRERA</TableCell>
               <TableCell sx={{ color: "white" }}>EVALUADOR</TableCell>
               <TableCell sx={{ color: "white" }}>TOTAL</TableCell>
@@ -448,11 +494,11 @@ function Evaluacion() {
               let estiloFila = {};
 
               if (item.posicion === 1) {
-                estiloFila = { backgroundColor: "#FFD70033" }; // Oro
+                estiloFila = { backgroundColor: "#FFD70055" }; // Oro
               } else if (item.posicion === 2) {
-                estiloFila = { backgroundColor: "#C0C0C033" }; // Plata
+                estiloFila = { backgroundColor: "#C0C0C055" }; // Plata
               } else if (item.posicion === 3) {
-                estiloFila = { backgroundColor: "#CD7F3233" }; // Bronce
+                estiloFila = { backgroundColor: "#CD7F3255" }; // Bronce
               }
 
               return (
@@ -474,6 +520,7 @@ function Evaluacion() {
                   </TableCell>
                   <TableCell>{item.tipoEvaluacion}</TableCell>
                   <TableCell>{item.evaluadoNombre}</TableCell>
+                  <TableCell>{item.numeroCartel}</TableCell>
                   <TableCell>{item.carrera}</TableCell>
                   <TableCell>{item.evaluador}</TableCell>
                   <TableCell>
@@ -515,7 +562,7 @@ function Evaluacion() {
       >
         <Alert
           onClose={() => setOpenSnackbar(false)}
-          severity="success"
+          severity={tipoMensaje}
           sx={{ width: "100%" }}
         >
           {mensaje}
