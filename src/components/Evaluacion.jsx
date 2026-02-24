@@ -56,11 +56,22 @@ function Evaluacion() {
   const criteriosRef = useRef([]);
   const [tipoMensaje, setTipoMensaje] = useState("success");
 
-  const manejarCambio = (index, valor) => {
-    const nuevos = [...criterios];
-    nuevos[index] = valor;
-    setCriterios(nuevos);
-    setMensaje(""); // 🔥 limpia error automáticamente
+  const manejarCambio = (index, value) => {
+    let numero = value.replace(/\D/g, ""); // solo números
+
+    if (numero.length > 2) {
+      numero = numero.slice(0, 2);
+    }
+
+    const valorNumerico = Number(numero);
+
+    if (valorNumerico > 10) {
+      numero = "10";
+    }
+
+    const nuevosCriterios = [...criterios];
+    nuevosCriterios[index] = numero;
+    setCriterios(nuevosCriterios);
   };
 
   const calcularTotal = () => {
@@ -68,15 +79,19 @@ function Evaluacion() {
   };
 
   const guardarEvaluacion = async () => {
-    if (!evaluadoNombre.trim()) {
+    if (!evaluadoNombre.trim().toLowerCase()) {
       setMensaje("El nombre del evaluado es obligatorio");
       return;
     }
-    if (!carrera.trim()) {
+    if (!numeroCartel.trim().toLowerCase()) {
+      setMensaje("El número de cartel es obligatorio");
+      return;
+    }
+    if (!carrera.trim().toLowerCase()) {
       setMensaje("La carrera es obligatoria");
       return;
     }
-    if (!evaluador.trim()) {
+    if (!evaluador.trim().toLowerCase()) {
       setMensaje("El evaluador es obligatorio");
       return;
     }
@@ -93,12 +108,32 @@ function Evaluacion() {
       }
     }
 
+    // 🔥 Protección si el documento ya no existe
+    if (editandoId && !lista.find((item) => item.id === editandoId)) {
+      setEditandoId(null);
+    }
+
+    // 🔒 Validar número de cartel duplicado en la misma carrera (ANTES de guardar)
+    const cartelExiste = lista.some(
+      (r) =>
+        r.numeroCartel === numeroCartel &&
+        r.carrera?.toLowerCase() === carrera.trim().toLowerCase() &&
+        r.id !== editandoId,
+    );
+
+    if (cartelExiste) {
+      setMensaje("Ya existe ese número de cartel en esta carrera");
+      setTipoMensaje("error");
+      setOpenSnackbar(true);
+      return;
+    }
+
     try {
       const datosGuardar = {
         tipoEvaluacion,
         evaluadoNombre,
         numeroCartel,
-        carrera,
+        carrera: carrera.trim().toLowerCase(),
         evaluador,
         criterios,
         total: calcularTotal(),
@@ -124,11 +159,6 @@ function Evaluacion() {
       setMensaje("Error al guardar ❌", error);
       setTipoMensaje("error");
       setOpenSnackbar(true);
-    }
-
-    // 🔥 Protección si el documento ya no existe
-    if (editandoId && !lista.find((item) => item.id === editandoId)) {
-      setEditandoId(null);
     }
 
     criteriosRef.current[0]?.focus();
@@ -171,7 +201,9 @@ function Evaluacion() {
 
     // 🔹 Filtro por carrera
     if (filtroCarrera !== "Todas") {
-      datos = datos.filter((item) => item.carrera === filtroCarrera);
+      datos = datos.filter(
+        (item) => item.carrera?.toLowerCase() === filtroCarrera.toLowerCase(),
+      );
     }
 
     // 🔹 Buscador
